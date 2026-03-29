@@ -32,8 +32,17 @@ def run(cmd: Sequence[str], *, env: Mapping[str, str] | None = None) -> None:
     subprocess.run(cmd, check=True, env=merged_env)
 
 
+def _find_bash() -> str:
+    if sys.platform == "win32":
+        # Prefer Git Bash over WSL bash on Windows
+        git_bash = r"C:\Program Files\Git\bin\bash.exe"
+        if os.path.isfile(git_bash):
+            return git_bash
+    return "bash"
+
+
 def run_bash(script: str, *, env: Mapping[str, str] | None = None) -> None:
-    run(["bash", "-lc", script], env=env)
+    run([_find_bash(), "-lc", script], env=env)
 
 
 def run_pwsh(script: str, *, env: Mapping[str, str] | None = None) -> None:
