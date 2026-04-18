@@ -514,7 +514,7 @@ jobs:
       DISPLAY_CHANNEL: ${{ needs.meta.outputs.channel }}
       VERSION: ${{ needs.meta.outputs.version }}
       PUB_DATE: ${{ needs.meta.outputs.pub_date }}
-      S3_ENDPOINT: https://s3.us-east-va.io.cloud.ovh.us
+      S3_ENDPOINT: https://ewr1.vultrobjects.com
       S3_BUCKET: fluxer-downloads
       PUBLIC_DL_BASE: https://api.fluxer.app/dl
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

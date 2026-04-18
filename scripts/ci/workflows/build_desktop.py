@@ -319,7 +319,7 @@ Get-ChildItem -Filter "*.sha256" -ErrorAction SilentlyContinue | Format-Table -A
     ),
     "install_rclone": INSTALL_RCLONE_SCRIPT,
     "configure_rclone": rclone_config_script(
-        endpoint="https://s3.us-east-va.io.cloud.ovh.us",
+        endpoint="https://ewr1.vultrobjects.com",
         acl="private",
     ),
     "build_payload": """
