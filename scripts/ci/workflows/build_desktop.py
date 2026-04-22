@@ -156,12 +156,27 @@ ZIP="$(ls -1 "$DIST"/*"${ELECTRON_ARCH}"*.zip | head -n1)"
 tmp="$(mktemp -d)"
 ditto -xk "$ZIP" "$tmp"
 APP="$(find "$tmp" -maxdepth 2 -name "*.app" -print -quit)"
-BID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")
+INFO_PLIST="$APP/Contents/Info.plist"
+PROFILE="$APP/Contents/embedded.provisionprofile"
+BID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PLIST")
 
 expected="app.fluxer"
-if [[ "${BUILD_CHANNEL:-stable}" == "canary" ]]; then expected="app.fluxer.canary"; fi
+expected_profile="3G5837T29K.app.fluxer"
+if [[ "${BUILD_CHANNEL:-stable}" == "canary" ]]; then
+  expected="app.fluxer.canary"
+  expected_profile="3G5837T29K.app.fluxer.canary"
+fi
 echo "Bundle id in zip: $BID (expected: $expected)"
 test "$BID" = "$expected"
+
+test -f "$PROFILE"
+decoded_profile="$tmp/embedded.provisionprofile.plist"
+security cms -D -i "$PROFILE" > "$decoded_profile"
+profile_app_id=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_profile")
+echo "Provisioning profile app id: $profile_app_id (expected: $expected_profile)"
+test "$profile_app_id" = "$expected_profile"
+
+codesign --verify --deep --strict --verbose=4 "$APP"
 """,
     "build_app_windows": "pnpm exec electron-builder --config electron-builder.config.cjs --win --${ELECTRON_ARCH}\n",
     "analyse_squirrel_paths": pwsh_step(

@@ -259,7 +259,7 @@ jobs:
           python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/build_desktop.py
           --step build_app_macos
 
-      - name: Verify macOS bundle ID (fail fast if wrong channel)
+      - name: Verify macOS artifact (bundle ID + profile + signature)
         if: matrix.platform == 'macos'
         working-directory: ${{ env.WORKDIR }}/fluxer_desktop
         env:
