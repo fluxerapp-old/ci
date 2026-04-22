@@ -43,11 +43,7 @@ def parse_bool(value: str) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
-def default_ref_for_channel(channel: str) -> str:
-    return "canary" if channel == "canary" else "main"
-
-
-def set_metadata_step(channel: str, ref: str, allow_ref_override: bool) -> None:
+def set_metadata_step(channel: str) -> None:
     require_env(["GITHUB_RUN_NUMBER"])
     import os
 
@@ -56,14 +52,6 @@ def set_metadata_step(channel: str, ref: str, allow_ref_override: bool) -> None:
     version = f"0.0.{run_number + version_offset}"
     pub_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     build_channel = "canary" if channel == "canary" else "stable"
-    default_ref = default_ref_for_channel(channel)
-    source_ref = ref or default_ref
-
-    if source_ref != default_ref and not allow_ref_override:
-        raise SystemExit(
-            f"Ref '{source_ref}' does not match default ref '{default_ref}' for channel '{channel}'. "
-            "Set allow_ref_override=true to use a non-default ref."
-        )
 
     write_github_output(
         {
@@ -71,7 +59,6 @@ def set_metadata_step(channel: str, ref: str, allow_ref_override: bool) -> None:
             "pub_date": pub_date,
             "channel": channel,
             "build_channel": build_channel,
-            "source_ref": source_ref,
         }
     )
 
@@ -538,8 +525,6 @@ SKIP_FLAG_ENV_MAP = {
 
 ENV_ARGS = [
     EnvArg("--channel", "CHANNEL"),
-    EnvArg("--ref", "REF"),
-    EnvArg("--allow-ref-override", "ALLOW_REF_OVERRIDE"),
     EnvArg("--skip-windows", "SKIP_WINDOWS"),
     EnvArg("--skip-windows-x64", "SKIP_WINDOWS_X64"),
     EnvArg("--skip-windows-arm64", "SKIP_WINDOWS_ARM64"),
@@ -559,11 +544,7 @@ def main() -> int:
 
     if args.step == "set_metadata":
         channel = os.environ.get("CHANNEL", "") or "stable"
-        set_metadata_step(
-            channel,
-            os.environ.get("REF", ""),
-            parse_bool(os.environ.get("ALLOW_REF_OVERRIDE", "false")),
-        )
+        set_metadata_step(channel)
         return 0
 
     if args.step == "set_matrix":

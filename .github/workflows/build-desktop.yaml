@@ -4,23 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: Channel to build (stable or canary)
+        description: Release channel label (stable or canary). Source is always fluxer-private@main.
         required: false
         type: choice
         options:
           - stable
           - canary
         default: stable
-      ref:
-        description: Git ref override to build (defaults to main for stable, canary for canary)
-        required: false
-        default: ''
-        type: string
-      allow_ref_override:
-        description: Allow non-default ref for selected channel
-        required: false
-        default: false
-        type: boolean
       skip_windows:
         description: Skip Windows builds
         required: false
@@ -89,7 +79,6 @@ jobs:
       pub_date: ${{ steps.meta.outputs.pub_date }}
       channel: ${{ steps.meta.outputs.channel }}
       build_channel: ${{ steps.meta.outputs.build_channel }}
-      source_ref: ${{ steps.meta.outputs.source_ref }}
     steps:
       - name: Checkout CI repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -100,8 +89,6 @@ jobs:
           python3 scripts/ci/workflows/build_desktop.py
           --step set_metadata
           --channel "${{ inputs.channel }}"
-          --ref "${{ inputs.ref }}"
-          --allow-ref-override "${{ inputs.allow_ref_override }}"
 
   matrix:
     name: Resolve build matrix
@@ -155,7 +142,7 @@ jobs:
       - name: Clone fluxer-private source (Unix)
         if: runner.os != 'Windows'
         run: >-
-          git clone --depth 1 --branch "${{ needs.meta.outputs.source_ref }}"
+          git clone --depth 1 --branch main
           "https://x-access-token:${{ secrets.FLUXER_PRIVATE_PAT }}@github.com/fluxerapp-old/fluxer-private.git"
           source
 
@@ -163,7 +150,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: >-
-          git clone --depth 1 --branch "${{ needs.meta.outputs.source_ref }}"
+          git clone --depth 1 --branch main
           "https://x-access-token:${{ secrets.FLUXER_PRIVATE_PAT }}@github.com/fluxerapp-old/fluxer-private.git"
           source
 
