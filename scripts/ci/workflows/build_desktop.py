@@ -158,6 +158,7 @@ ditto -xk "$ZIP" "$tmp"
 APP="$(find "$tmp" -maxdepth 2 -name "*.app" -print -quit)"
 INFO_PLIST="$APP/Contents/Info.plist"
 PROFILE="$APP/Contents/embedded.provisionprofile"
+WEBAUTHN_PACKAGE="$APP/Contents/Resources/app.asar.unpacked/node_modules/@electron-webauthn/native-darwin-${ELECTRON_ARCH}/package.json"
 BID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PLIST")
 
 expected="app.fluxer"
@@ -175,6 +176,9 @@ security cms -D -i "$PROFILE" > "$decoded_profile"
 profile_app_id=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_profile")
 echo "Provisioning profile app id: $profile_app_id (expected: $expected_profile)"
 test "$profile_app_id" = "$expected_profile"
+
+test -f "$WEBAUTHN_PACKAGE"
+echo "Found WebAuthn runtime package: $WEBAUTHN_PACKAGE"
 
 codesign --verify --deep --strict --verbose=4 "$APP"
 """,
