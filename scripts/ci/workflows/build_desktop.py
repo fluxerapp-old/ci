@@ -148,7 +148,7 @@ sudo gem install --no-document fpm
     "update_version": "pnpm version \"${VERSION}\" --no-git-tag-version --allow-same-version\n",
     "set_build_channel": "pnpm set-channel\n",
     "build_electron_main": "pnpm build\n",
-    "build_app_macos": "pnpm exec electron-builder --config electron-builder.config.cjs --mac --${ELECTRON_ARCH}\n",
+    "build_app_macos": 'ELECTRON_ARCH="${ELECTRON_ARCH}" pnpm exec electron-builder --config electron-builder.config.cjs --mac --${ELECTRON_ARCH}\n',
     "verify_bundle_id": """
 set -euo pipefail
 DIST="dist-electron"
@@ -182,7 +182,7 @@ echo "Found WebAuthn runtime package: $WEBAUTHN_PACKAGE"
 
 codesign --verify --deep --strict --verbose=4 "$APP"
 """,
-    "build_app_windows": "pnpm exec electron-builder --config electron-builder.config.cjs --win --${ELECTRON_ARCH}\n",
+    "build_app_windows": 'ELECTRON_ARCH="${ELECTRON_ARCH}" pnpm exec electron-builder --config electron-builder.config.cjs --win --${ELECTRON_ARCH}\n',
     "analyse_squirrel_paths": pwsh_step(
         r"""
 $primaryDir = if ($env:ARCH -eq "arm64") { "dist-electron/squirrel-windows-arm64" } else { "dist-electron/squirrel-windows" }
@@ -242,7 +242,7 @@ Set-Content -Path $scriptPath -Value $lines -Encoding utf8
 python $scriptPath
 """
     ),
-    "build_app_linux": "pnpm exec electron-builder --config electron-builder.config.cjs --linux --${ELECTRON_ARCH}\n",
+    "build_app_linux": 'ELECTRON_ARCH="${ELECTRON_ARCH}" pnpm exec electron-builder --config electron-builder.config.cjs --linux --${ELECTRON_ARCH}\n',
     "prepare_artifacts_windows": pwsh_step(
         r"""
 New-Item -ItemType Directory -Force upload_staging | Out-Null
