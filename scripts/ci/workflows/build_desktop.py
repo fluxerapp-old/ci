@@ -516,11 +516,44 @@ find s3_payload -maxdepth 6 -type f | sort
 """,
     "upload_payload": """
 set -euo pipefail
+
+payload_filter="$(mktemp)"
+metadata_filter="$(mktemp)"
+trap 'rm -f "$payload_filter" "$metadata_filter"' EXIT
+
+cat > "$payload_filter" <<'EOF'
+- **/manifest.json
+- **/*.yml
+- **/RELEASES*
+- **/releases.json
++ **
+EOF
+
+cat > "$metadata_filter" <<'EOF'
++ **/manifest.json
++ **/*.yml
++ **/RELEASES*
++ **/releases.json
+- **
+EOF
+
+echo "Uploading desktop binaries and checksums first..."
 rclone copy s3_payload/desktop "ovh:${S3_BUCKET}/desktop" \
+  --filter-from "$payload_filter" \
   --transfers 32 \
   --checkers 16 \
   --fast-list \
   --s3-upload-concurrency 8 \
+  --s3-chunk-size 16M \
+  -v
+
+echo "Uploading manifests and updater metadata last..."
+rclone copy s3_payload/desktop "ovh:${S3_BUCKET}/desktop" \
+  --filter-from "$metadata_filter" \
+  --transfers 8 \
+  --checkers 8 \
+  --fast-list \
+  --s3-upload-concurrency 4 \
   --s3-chunk-size 16M \
   -v
 """,
