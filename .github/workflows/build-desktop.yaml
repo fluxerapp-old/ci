@@ -282,7 +282,7 @@ jobs:
           --step build_app_windows
 
       - name: Analyze Squirrel nupkg for long paths
-        if: matrix.platform == 'windows'
+        if: matrix.platform == 'windows' && matrix.arch == 'x64'
         working-directory: ${{ env.WORKDIR }}/fluxer_desktop
         env:
           BUILD_VERSION: ${{ env.VERSION }}
