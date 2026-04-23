@@ -189,6 +189,11 @@ $primaryDir = if ($env:ARCH -eq "arm64") { "dist-electron/squirrel-windows-arm64
 $fallbackDir = if ($env:ARCH -eq "arm64") { "dist-electron/squirrel-windows" } else { "dist-electron/squirrel-windows-arm64" }
 $dirs = @($primaryDir, $fallbackDir)
 
+if ($env:ARCH -eq "arm64") {
+  Write-Host "Skipping Squirrel path analysis for Windows arm64; Squirrel.Windows is only built for x64."
+  exit 0
+}
+
 $nupkg = $null
 foreach ($d in $dirs) {
   if (Test-Path $d) {
@@ -264,6 +269,9 @@ if ($picked) {
   Copy-Item -Force -ErrorAction SilentlyContinue "$picked\RELEASES*" "upload_staging\"
   Copy-Item -Force -ErrorAction SilentlyContinue "$picked\*.nupkg" "upload_staging\"
   Copy-Item -Force -ErrorAction SilentlyContinue "$picked\*.nupkg.blockmap" "upload_staging\"
+} elseif ($env:ARCH -eq "arm64" -and (Test-Path $dist)) {
+  Copy-Item -Force -ErrorAction SilentlyContinue "$dist\*.exe" "upload_staging\"
+  Copy-Item -Force -ErrorAction SilentlyContinue "$dist\*.exe.blockmap" "upload_staging\"
 }
 
 if (Test-Path $dist) {
@@ -273,7 +281,7 @@ if (Test-Path $dist) {
 }
 
 if (-not (Get-ChildItem upload_staging -Filter *.exe -ErrorAction SilentlyContinue)) {
-  throw "No installer .exe staged. Squirrel outputs were not copied."
+  throw "No installer .exe staged."
 }
 
 Get-ChildItem -Force upload_staging | Format-Table -AutoSize
@@ -299,7 +307,7 @@ ls -la upload_staging/
     "normalise_updater_yaml": """
 set -euo pipefail
 cd upload_staging
-[[ "${PLATFORM}" == "macos" && -f latest-mac.yml && ! -f latest-mac-arm64.yml ]] && mv latest-mac.yml latest-mac-arm64.yml || true
+[[ "${PLATFORM}" == "macos" && "${ARCH}" == "arm64" && -f latest-mac.yml && ! -f latest-mac-arm64.yml ]] && mv latest-mac.yml latest-mac-arm64.yml || true
 """,
     "generate_checksums_unix": """
 set -euo pipefail
