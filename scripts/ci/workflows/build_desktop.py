@@ -186,7 +186,32 @@ echo "Found WebAuthn runtime package: $WEBAUTHN_PACKAGE"
 
 codesign --verify --deep --strict --verbose=4 "$APP"
 """,
-    "build_app_windows": 'ELECTRON_ARCH="${ELECTRON_ARCH}" pnpm exec electron-builder --config electron-builder.config.cjs --win --${ELECTRON_ARCH}\n',
+    "build_app_windows": """
+set -uo pipefail
+attempt=1
+max_attempts=3
+log="$(mktemp)"
+while :; do
+  echo "::group::electron-builder windows attempt ${attempt}/${max_attempts}"
+  if ELECTRON_ARCH="${ELECTRON_ARCH}" pnpm exec electron-builder \\
+      --config electron-builder.config.cjs --win --"${ELECTRON_ARCH}" 2>&1 | tee "${log}"; then
+    echo "::endgroup::"
+    exit 0
+  fi
+  status=${PIPESTATUS[0]}
+  echo "::endgroup::"
+  # Retry only on the transient signtool/7za RCX*.tmp race; bail on real errors.
+  if grep -qE 'RCX[0-9A-Fa-f]+\\.tmp' "${log}" && [ "${attempt}" -lt "${max_attempts}" ]; then
+    echo "Detected transient RCX*.tmp / 7za race; cleaning win-unpacked and retrying."
+    find dist-electron -type f -iname 'RCX*.tmp' -print -delete 2>/dev/null || true
+    rm -rf dist-electron/win-unpacked dist-electron/*-unpacked 2>/dev/null || true
+    attempt=$((attempt + 1))
+    sleep 5
+    continue
+  fi
+  exit "${status}"
+done
+""",
     "analyse_squirrel_paths": pwsh_step(
         r"""
 $primaryDir = if ($env:ARCH -eq "arm64") { "dist-electron/squirrel-windows-arm64" } else { "dist-electron/squirrel-windows" }
