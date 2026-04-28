@@ -152,7 +152,32 @@ sudo gem install --no-document fpm
     "update_version": "pnpm version \"${VERSION}\" --no-git-tag-version --allow-same-version\n",
     "set_build_channel": "pnpm set-channel\n",
     "build_electron_main": "pnpm build\n",
-    "build_app_macos": 'ELECTRON_ARCH="${ELECTRON_ARCH}" pnpm exec electron-builder --config electron-builder.config.cjs --mac --${ELECTRON_ARCH}\n',
+    "build_app_macos": """
+set -uo pipefail
+attempt=1
+max_attempts=3
+log="$(mktemp)"
+while :; do
+  echo "::group::electron-builder macos attempt ${attempt}/${max_attempts}"
+  if ELECTRON_ARCH="${ELECTRON_ARCH}" pnpm exec electron-builder \\
+      --config electron-builder.config.cjs --mac --"${ELECTRON_ARCH}" 2>&1 | tee "${log}"; then
+    echo "::endgroup::"
+    exit 0
+  fi
+  status=${PIPESTATUS[0]}
+  echo "::endgroup::"
+  # Retry only on transient network errors fetching electron/binaries from GitHub.
+  if grep -qE '(EOF|status code 5[0-9][0-9]|cannot resolve|i/o timeout|connection reset|TLS handshake)' "${log}" \\
+     && [ "${attempt}" -lt "${max_attempts}" ]; then
+    echo "Detected transient network failure; retrying."
+    rm -rf dist-electron/mac dist-electron/mac-arm64 dist-electron/*-unpacked 2>/dev/null || true
+    attempt=$((attempt + 1))
+    sleep 10
+    continue
+  fi
+  exit "${status}"
+done
+""",
     "verify_bundle_id": """
 set -euo pipefail
 DIST="dist-electron"
@@ -200,9 +225,10 @@ while :; do
   fi
   status=${PIPESTATUS[0]}
   echo "::endgroup::"
-  # Retry only on the transient signtool/7za RCX*.tmp race; bail on real errors.
-  if grep -qE 'RCX[0-9A-Fa-f]+\\.tmp' "${log}" && [ "${attempt}" -lt "${max_attempts}" ]; then
-    echo "Detected transient RCX*.tmp / 7za race; cleaning win-unpacked and retrying."
+  # Retry on the transient signtool/7za RCX*.tmp race or transient GitHub download failures.
+  if grep -qE '(RCX[0-9A-Fa-f]+\\.tmp|EOF|status code 5[0-9][0-9]|cannot resolve|i/o timeout|connection reset|TLS handshake)' "${log}" \\
+     && [ "${attempt}" -lt "${max_attempts}" ]; then
+    echo "Detected transient build failure (RCX race or network); cleaning and retrying."
     find dist-electron -type f -iname 'RCX*.tmp' -print -delete 2>/dev/null || true
     rm -rf dist-electron/win-unpacked dist-electron/*-unpacked 2>/dev/null || true
     attempt=$((attempt + 1))
@@ -276,7 +302,31 @@ Set-Content -Path $scriptPath -Value $lines -Encoding utf8
 python $scriptPath
 """
     ),
-    "build_app_linux": 'ELECTRON_ARCH="${ELECTRON_ARCH}" pnpm exec electron-builder --config electron-builder.config.cjs --linux --${ELECTRON_ARCH}\n',
+    "build_app_linux": """
+set -uo pipefail
+attempt=1
+max_attempts=3
+log="$(mktemp)"
+while :; do
+  echo "::group::electron-builder linux attempt ${attempt}/${max_attempts}"
+  if ELECTRON_ARCH="${ELECTRON_ARCH}" pnpm exec electron-builder \\
+      --config electron-builder.config.cjs --linux --"${ELECTRON_ARCH}" 2>&1 | tee "${log}"; then
+    echo "::endgroup::"
+    exit 0
+  fi
+  status=${PIPESTATUS[0]}
+  echo "::endgroup::"
+  if grep -qE '(EOF|status code 5[0-9][0-9]|cannot resolve|i/o timeout|connection reset|TLS handshake)' "${log}" \\
+     && [ "${attempt}" -lt "${max_attempts}" ]; then
+    echo "Detected transient network failure; retrying."
+    rm -rf dist-electron/linux-unpacked dist-electron/*-unpacked 2>/dev/null || true
+    attempt=$((attempt + 1))
+    sleep 10
+    continue
+  fi
+  exit "${status}"
+done
+""",
     "prepare_artifacts_windows": pwsh_step(
         r"""
 New-Item -ItemType Directory -Force upload_staging | Out-Null
