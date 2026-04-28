@@ -43,7 +43,7 @@ def parse_bool(value: str) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
-def set_metadata_step(channel: str) -> None:
+def set_metadata_step(channel: str, test_build: bool) -> None:
     require_env(["GITHUB_RUN_NUMBER"])
     import os
 
@@ -52,6 +52,7 @@ def set_metadata_step(channel: str) -> None:
     version = f"0.0.{run_number + version_offset}"
     pub_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     build_channel = "canary" if channel == "canary" else "stable"
+    s3_prefix = "desktop-test" if test_build else "desktop"
 
     write_github_output(
         {
@@ -59,6 +60,8 @@ def set_metadata_step(channel: str) -> None:
             "pub_date": pub_date,
             "channel": channel,
             "build_channel": build_channel,
+            "test_build": "true" if test_build else "false",
+            "s3_prefix": s3_prefix,
         }
     )
 
@@ -364,7 +367,7 @@ for dir in artifacts/fluxer-desktop-${CHANNEL}-*; do
       ;;
   esac
 
-  dest="s3_payload/desktop/${CHANNEL}/${plat}/${arch}"
+  dest="s3_payload/${S3_DESKTOP_PREFIX}/${CHANNEL}/${plat}/${arch}"
   mkdir -p "$dest"
   cp -av "$dir"/* "$dest/" || true
 
@@ -385,7 +388,7 @@ for dir in artifacts/fluxer-desktop-${CHANNEL}-*; do
       echo "No .zip found for macOS $arch in $dest (auto-update requires zip artifacts)."
     else
       zip_name="$(basename "$zip_file")"
-      url="${PUBLIC_DL_BASE}/desktop/${CHANNEL}/${plat}/${arch}/${zip_name}"
+      url="${PUBLIC_DL_BASE}/${S3_DESKTOP_PREFIX}/${CHANNEL}/${plat}/${arch}/${zip_name}"
 
       cat > "$dest/RELEASES.json" <<EOF
 {
@@ -512,7 +515,7 @@ EOF
 done
 
 echo "Payload tree:"
-find s3_payload -maxdepth 6 -type f | sort
+find "s3_payload/${S3_DESKTOP_PREFIX}" -maxdepth 6 -type f 2>/dev/null | sort
 """,
     "upload_payload": """
 set -euo pipefail
@@ -537,8 +540,8 @@ cat > "$metadata_filter" <<'EOF'
 - **
 EOF
 
-echo "Uploading desktop binaries and checksums first..."
-rclone copy s3_payload/desktop "ovh:${S3_BUCKET}/desktop" \
+echo "Uploading desktop binaries and checksums first (prefix: ${S3_DESKTOP_PREFIX})..."
+rclone copy "s3_payload/${S3_DESKTOP_PREFIX}" "ovh:${S3_BUCKET}/${S3_DESKTOP_PREFIX}" \
   --filter-from "$payload_filter" \
   --transfers 32 \
   --checkers 16 \
@@ -548,7 +551,7 @@ rclone copy s3_payload/desktop "ovh:${S3_BUCKET}/desktop" \
   -v
 
 echo "Uploading manifests and updater metadata last..."
-rclone copy s3_payload/desktop "ovh:${S3_BUCKET}/desktop" \
+rclone copy "s3_payload/${S3_DESKTOP_PREFIX}" "ovh:${S3_BUCKET}/${S3_DESKTOP_PREFIX}" \
   --filter-from "$metadata_filter" \
   --transfers 8 \
   --checkers 8 \
@@ -557,15 +560,21 @@ rclone copy s3_payload/desktop "ovh:${S3_BUCKET}/desktop" \
   --s3-chunk-size 16M \
   -v
 """,
-    "build_summary": """
+    "build_summary": r"""
 {
-  echo "## Desktop ${DISPLAY_CHANNEL^} Upload Complete"
+  if [[ "${TEST_BUILD:-false}" == "true" ]]; then
+    echo "## Desktop ${DISPLAY_CHANNEL^} Test Upload Complete"
+    echo ""
+    echo "_This is a **test build**. Artifacts were stashed under \`${S3_DESKTOP_PREFIX}/\` so the API will not promote them as a release._"
+  else
+    echo "## Desktop ${DISPLAY_CHANNEL^} Upload Complete"
+  fi
   echo ""
   echo "**Version:** ${VERSION}"
   echo ""
-  echo "**S3 prefix:** desktop/${CHANNEL}/"
+  echo "**S3 prefix:** ${S3_DESKTOP_PREFIX}/${CHANNEL}/"
   echo ""
-  echo "**Redirect endpoint shape:** /dl/desktop/${CHANNEL}/{plat}/{arch}/{format}"
+  echo "**Redirect endpoint shape:** /dl/${S3_DESKTOP_PREFIX}/${CHANNEL}/{plat}/{arch}/{format}"
 } >> "$GITHUB_STEP_SUMMARY"
 """,
 }
@@ -585,6 +594,7 @@ SKIP_FLAG_ENV_MAP = {
 
 ENV_ARGS = [
     EnvArg("--channel", "CHANNEL"),
+    EnvArg("--test-build", "TEST_BUILD"),
     EnvArg("--skip-windows", "SKIP_WINDOWS"),
     EnvArg("--skip-windows-x64", "SKIP_WINDOWS_X64"),
     EnvArg("--skip-windows-arm64", "SKIP_WINDOWS_ARM64"),
@@ -604,7 +614,8 @@ def main() -> int:
 
     if args.step == "set_metadata":
         channel = os.environ.get("CHANNEL", "") or "stable"
-        set_metadata_step(channel)
+        test_build = parse_bool(os.environ.get("TEST_BUILD", "false"))
+        set_metadata_step(channel, test_build)
         return 0
 
     if args.step == "set_matrix":

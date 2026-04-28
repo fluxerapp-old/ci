@@ -11,6 +11,11 @@ on:
           - stable
           - canary
         default: stable
+      test_build:
+        description: Stash artifacts under desktop-test/ instead of desktop/ (API will not pick these up as a release).
+        required: false
+        default: false
+        type: boolean
       skip_windows:
         description: Skip Windows builds
         required: false
@@ -62,12 +67,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: desktop-${{ inputs.channel }}
+  group: desktop-${{ inputs.channel }}-${{ inputs.test_build && 'test' || 'release' }}
   cancel-in-progress: true
 
 env:
   CHANNEL: ${{ inputs.channel }}
   BUILD_CHANNEL: ${{ inputs.channel == 'canary' && 'canary' || 'stable' }}
+  TEST_BUILD: ${{ inputs.test_build && 'true' || 'false' }}
 
 jobs:
   meta:
@@ -79,6 +85,8 @@ jobs:
       pub_date: ${{ steps.meta.outputs.pub_date }}
       channel: ${{ steps.meta.outputs.channel }}
       build_channel: ${{ steps.meta.outputs.build_channel }}
+      test_build: ${{ steps.meta.outputs.test_build }}
+      s3_prefix: ${{ steps.meta.outputs.s3_prefix }}
     steps:
       - name: Checkout CI repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -89,6 +97,7 @@ jobs:
           python3 scripts/ci/workflows/build_desktop.py
           --step set_metadata
           --channel "${{ inputs.channel }}"
+          --test-build "${{ inputs.test_build }}"
 
   matrix:
     name: Resolve build matrix
@@ -501,6 +510,8 @@ jobs:
       DISPLAY_CHANNEL: ${{ needs.meta.outputs.channel }}
       VERSION: ${{ needs.meta.outputs.version }}
       PUB_DATE: ${{ needs.meta.outputs.pub_date }}
+      TEST_BUILD: ${{ needs.meta.outputs.test_build }}
+      S3_DESKTOP_PREFIX: ${{ needs.meta.outputs.s3_prefix }}
       S3_ENDPOINT: https://ewr1.vultrobjects.com
       S3_BUCKET: fluxer-downloads
       PUBLIC_DL_BASE: https://api.fluxer.app/dl
