@@ -144,7 +144,8 @@ sudo apt-get update
 sudo apt-get install -y \
   libx11-dev libxtst-dev libxt-dev libxinerama-dev libxkbcommon-dev libxrandr-dev \
   ruby ruby-dev build-essential rpm \
-  libpixman-1-dev libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+  libpixman-1-dev libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
+  libpipewire-0.3-dev libspa-0.2-dev
 sudo gem install --no-document fpm
 """,
     "install_dependencies": "pnpm install --frozen-lockfile\n",
