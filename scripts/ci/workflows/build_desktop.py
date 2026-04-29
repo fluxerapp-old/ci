@@ -214,6 +214,9 @@ native_rels=(
   "@fluxer/mac-app-audio/prebuilds/darwin-${ELECTRON_ARCH}/mac_app_audio.napi.node"
   "@fluxer/mac-window-capture/prebuilds/darwin-${ELECTRON_ARCH}/mac_window_capture.napi.node"
 )
+asar_unpacked_rels=(
+  "@fluxer/shm-bridge/shm-bridge.darwin-${ELECTRON_ARCH}.node"
+)
 
 for rel in "${native_rels[@]}"; do
   native_file="$APP/Contents/Resources/app.asar.unpacked/node_modules/$rel"
@@ -221,7 +224,7 @@ for rel in "${native_rels[@]}"; do
   echo "Found native runtime artifact: $native_file"
 done
 
-node - "$APP/Contents/Resources/app.asar" "${native_rels[@]}" <<'NODE'
+node - "$APP/Contents/Resources/app.asar" "${asar_unpacked_rels[@]}" <<'NODE'
 const fs = require('node:fs');
 
 const [asarPath, ...nativeRels] = process.argv.slice(2);
