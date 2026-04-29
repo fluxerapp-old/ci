@@ -209,6 +209,47 @@ test "$profile_app_id" = "$expected_profile"
 test -f "$WEBAUTHN_PACKAGE"
 echo "Found WebAuthn runtime package: $WEBAUTHN_PACKAGE"
 
+native_rels=(
+  "@fluxer/shm-bridge/shm-bridge.darwin-${ELECTRON_ARCH}.node"
+  "@fluxer/mac-app-audio/build/Release/mac_app_audio.node"
+  "@fluxer/mac-window-capture/build/Release/mac_window_capture.node"
+)
+
+for rel in "${native_rels[@]}"; do
+  native_file="$APP/Contents/Resources/app.asar.unpacked/node_modules/$rel"
+  test -f "$native_file"
+  echo "Found native runtime artifact: $native_file"
+done
+
+node - "$APP/Contents/Resources/app.asar" "${native_rels[@]}" <<'NODE'
+const fs = require('node:fs');
+
+const [asarPath, ...nativeRels] = process.argv.slice(2);
+const buffer = fs.readFileSync(asarPath);
+const headerSize = buffer.readUInt32LE(12);
+const header = JSON.parse(buffer.slice(16, 16 + headerSize).toString('utf8'));
+
+function getEntry(pathSegments) {
+  let node = header;
+  for (const segment of pathSegments) {
+    node = node.files && node.files[segment];
+    if (!node) return null;
+  }
+  return node;
+}
+
+for (const rel of nativeRels) {
+  const entry = getEntry(['node_modules', ...rel.split('/')]);
+  if (!entry) {
+    throw new Error(`Missing native artifact in app.asar header: ${rel}`);
+  }
+  if (!entry.unpacked) {
+    throw new Error(`Native artifact is not marked unpacked in app.asar header: ${rel}`);
+  }
+  console.log(`Verified native artifact is unpacked in app.asar header: ${rel}`);
+}
+NODE
+
 codesign --verify --deep --strict --verbose=4 "$APP"
 """,
     "build_app_windows": """
