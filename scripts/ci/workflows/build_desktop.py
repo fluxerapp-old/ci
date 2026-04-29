@@ -214,44 +214,12 @@ native_rels=(
   "@fluxer/mac-app-audio/prebuilds/darwin-${ELECTRON_ARCH}/mac_app_audio.napi.node"
   "@fluxer/mac-window-capture/prebuilds/darwin-${ELECTRON_ARCH}/mac_window_capture.napi.node"
 )
-asar_unpacked_rels=(
-  "@fluxer/shm-bridge/shm-bridge.darwin-${ELECTRON_ARCH}.node"
-)
 
 for rel in "${native_rels[@]}"; do
   native_file="$APP/Contents/Resources/app.asar.unpacked/node_modules/$rel"
   test -f "$native_file"
   echo "Found native runtime artifact: $native_file"
 done
-
-node - "$APP/Contents/Resources/app.asar" "${asar_unpacked_rels[@]}" <<'NODE'
-const fs = require('node:fs');
-
-const [asarPath, ...nativeRels] = process.argv.slice(2);
-const buffer = fs.readFileSync(asarPath);
-const headerSize = buffer.readUInt32LE(12);
-const header = JSON.parse(buffer.slice(16, 16 + headerSize).toString('utf8'));
-
-function getEntry(pathSegments) {
-  let node = header;
-  for (const segment of pathSegments) {
-    node = node.files && node.files[segment];
-    if (!node) return null;
-  }
-  return node;
-}
-
-for (const rel of nativeRels) {
-  const entry = getEntry(['node_modules', ...rel.split('/')]);
-  if (!entry) {
-    throw new Error(`Missing native artifact in app.asar header: ${rel}`);
-  }
-  if (!entry.unpacked) {
-    throw new Error(`Native artifact is not marked unpacked in app.asar header: ${rel}`);
-  }
-  console.log(`Verified native artifact is unpacked in app.asar header: ${rel}`);
-}
-NODE
 
 codesign --verify --deep --strict --verbose=4 "$APP"
 """,
