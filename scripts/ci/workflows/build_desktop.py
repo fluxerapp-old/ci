@@ -210,9 +210,7 @@ test -f "$WEBAUTHN_PACKAGE"
 echo "Found WebAuthn runtime package: $WEBAUTHN_PACKAGE"
 
 native_rels=(
-  "@fluxer/shm-bridge/shm-bridge.darwin-${ELECTRON_ARCH}.node"
   "@fluxer/mac-app-audio/prebuilds/darwin-${ELECTRON_ARCH}/mac_app_audio.napi.node"
-  "@fluxer/mac-window-capture/prebuilds/darwin-${ELECTRON_ARCH}/mac_window_capture.napi.node"
 )
 
 for rel in "${native_rels[@]}"; do
