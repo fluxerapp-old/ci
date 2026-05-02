@@ -163,7 +163,7 @@ jobs:
           "https://x-access-token:${{ secrets.FLUXER_PRIVATE_PAT }}@github.com/fluxerapp-old/fluxer-private.git"
           source
 
-      - name: Shorten Windows paths (workspace + temp for Squirrel) and pin pnpm store
+      - name: Shorten Windows paths and pin pnpm store
         if: runner.os == 'Windows'
         run: >-
           python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/build_desktop.py
@@ -254,6 +254,13 @@ jobs:
           python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/build_desktop.py
           --step build_electron_main
 
+      - name: Install Velopack CLI
+        if: matrix.platform == 'windows'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/build_desktop.py
+          --step install_velopack_cli
+
       - name: Build Electron app (macOS)
         if: matrix.platform == 'macos'
         working-directory: ${{ env.WORKDIR }}/fluxer_desktop
@@ -284,22 +291,31 @@ jobs:
           BUILD_CHANNEL: ${{ env.BUILD_CHANNEL }}
           TEMP: C:\t
           TMP: C:\t
-          SQUIRREL_TEMP: C:\sq
           ELECTRON_BUILDER_CACHE: C:\ebcache
         run: >-
           python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/build_desktop.py
           --step build_app_windows
 
-      - name: Analyze Squirrel nupkg for long paths
-        if: matrix.platform == 'windows' && matrix.arch == 'x64'
+      - name: Package Windows app with Velopack
+        if: matrix.platform == 'windows'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        env:
+          BUILD_CHANNEL: ${{ env.BUILD_CHANNEL }}
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/build_desktop.py
+          --step package_app_windows_velopack
+
+      - name: Analyze Velopack nupkg for long paths
+        if: matrix.platform == 'windows'
         working-directory: ${{ env.WORKDIR }}/fluxer_desktop
         env:
           BUILD_VERSION: ${{ env.VERSION }}
+          BUILD_CHANNEL: ${{ env.BUILD_CHANNEL }}
           MAX_WINDOWS_PATH_LEN: 260
           PATH_HEADROOM: 10
         run: >-
           python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/build_desktop.py
-          --step analyse_squirrel_paths
+          --step analyse_velopack_paths
 
       - name: Build Electron app (Linux)
         if: matrix.platform == 'linux'
@@ -363,6 +379,8 @@ jobs:
             upload_staging/*.tar.gz
             upload_staging/*.tar.gz.sha256
             upload_staging/*.yml
+            upload_staging/assets*.json
+            upload_staging/releases*.json
             upload_staging/*.nupkg
             upload_staging/*.nupkg.blockmap
             upload_staging/*.nupkg.sha256

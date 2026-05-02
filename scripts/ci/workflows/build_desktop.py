@@ -38,6 +38,8 @@ PLATFORMS = [
     {"platform": "linux", "arch": "arm64", "os": "ubuntu-24.04-arm", "electron_arch": "arm64"},
 ]
 
+VELOPACK_VERSION = "0.0.1298"
+
 
 def parse_bool(value: str) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
@@ -102,11 +104,9 @@ subst W: "$target"
 "WORKDIR=W:" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
 New-Item -ItemType Directory -Force "C:\t" | Out-Null
-New-Item -ItemType Directory -Force "C:\sq" | Out-Null
 New-Item -ItemType Directory -Force "C:\ebcache" | Out-Null
 "TEMP=C:\t" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 "TMP=C:\t" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-"SQUIRREL_TEMP=C:\sq" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 "ELECTRON_BUILDER_CACHE=C:\ebcache" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
 New-Item -ItemType Directory -Force "C:\pnpm-store" | Out-Null
@@ -152,6 +152,13 @@ sudo gem install --no-document fpm
     "update_version": "pnpm version \"${VERSION}\" --no-git-tag-version --allow-same-version\n",
     "set_build_channel": "pnpm set-channel\n",
     "build_electron_main": "pnpm build\n",
+    "install_velopack_cli": pwsh_step(
+        f"""
+$toolDir = Join-Path (Get-Location) ".velopack"
+New-Item -ItemType Directory -Force $toolDir | Out-Null
+dotnet tool install --tool-path $toolDir vpk --version "{VELOPACK_VERSION}"
+"""
+    ),
     "build_app_macos": """
 set -uo pipefail
 attempt=1
@@ -248,30 +255,97 @@ while :; do
   exit "${status}"
 done
 """,
-    "analyse_squirrel_paths": pwsh_step(
+    "package_app_windows_velopack": pwsh_step(
         r"""
-$primaryDir = if ($env:ARCH -eq "arm64") { "dist-electron/squirrel-windows-arm64" } else { "dist-electron/squirrel-windows" }
-$fallbackDir = if ($env:ARCH -eq "arm64") { "dist-electron/squirrel-windows" } else { "dist-electron/squirrel-windows-arm64" }
-$dirs = @($primaryDir, $fallbackDir)
+$packId = if ($env:BUILD_CHANNEL -eq "canary") { "fluxer_desktop_canary" } else { "fluxer_desktop" }
+$packTitle = if ($env:BUILD_CHANNEL -eq "canary") { "Fluxer Canary" } else { "Fluxer" }
+$iconDir = if ($env:BUILD_CHANNEL -eq "canary") { "icons-canary" } else { "icons-stable" }
+$runtime = if ($env:ARCH -eq "arm64") { "win-arm64" } else { "win-x64" }
+$mainExe = "$packTitle.exe"
+$outputDir = "dist-electron/velopack-windows-$($env:ARCH)"
 
+$candidateDirs = @()
 if ($env:ARCH -eq "arm64") {
-  Write-Host "Skipping Squirrel path analysis for Windows arm64; Squirrel.Windows is only built for x64."
-  exit 0
+  $candidateDirs += "dist-electron/win-arm64-unpacked"
 }
+$candidateDirs += "dist-electron/win-unpacked"
 
-$nupkg = $null
-foreach ($d in $dirs) {
-  if (Test-Path $d) {
-    $nupkg = Get-ChildItem -Path "$d/*.nupkg" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($nupkg) { break }
+$packDir = $null
+foreach ($candidate in $candidateDirs) {
+  if (Test-Path (Join-Path $candidate $mainExe)) {
+    $packDir = $candidate
+    break
   }
 }
 
-if (-not $nupkg) {
-  throw "No Squirrel nupkg found in: $($dirs -join ', ')"
+if (-not $packDir) {
+  throw "Unable to find unpacked Windows app containing $mainExe in: $($candidateDirs -join ', ')"
 }
 
-Write-Host "Analyzing Windows installer $($nupkg.FullName)"
+$vpk = Join-Path (Get-Location) ".velopack/vpk.exe"
+if (-not (Test-Path $vpk)) {
+  $vpk = Join-Path (Get-Location) ".velopack/vpk"
+}
+if (-not (Test-Path $vpk)) {
+  throw "Velopack CLI was not installed under .velopack"
+}
+
+Remove-Item -Force -Recurse $outputDir -ErrorAction SilentlyContinue
+
+& $vpk --yes pack `
+  --packId $packId `
+  --packVersion $env:VERSION `
+  --packDir $packDir `
+  --mainExe $mainExe `
+  --packTitle $packTitle `
+  --packAuthors "Fluxer Contributors" `
+  --runtime $runtime `
+  --icon "build_resources/$iconDir/icon.ico" `
+  --outputDir $outputDir `
+  --delta BestSpeed
+
+if ($LASTEXITCODE -ne 0) {
+  throw "vpk pack failed with exit code $LASTEXITCODE"
+}
+
+$legacyReleases = Join-Path $outputDir "RELEASES"
+$velopackReleases = Join-Path $outputDir "releases.win.json"
+$fullNupkg = Get-ChildItem -Path "$outputDir\*-full.nupkg" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+
+if (-not (Test-Path $legacyReleases)) {
+  throw "Velopack did not produce the legacy Squirrel RELEASES file. Do not pass --channel to vpk pack for Windows, or old Squirrel clients cannot migrate."
+}
+
+if (-not (Test-Path $velopackReleases)) {
+  throw "Velopack did not produce releases.win.json for Windows updates."
+}
+
+if (-not $fullNupkg) {
+  throw "Velopack did not produce a full nupkg payload for Windows updates."
+}
+
+$legacyFeed = Get-Content -Raw $legacyReleases
+if (-not $legacyFeed.Contains($fullNupkg.Name)) {
+  throw "The legacy Squirrel RELEASES file does not reference $($fullNupkg.Name)."
+}
+
+Get-ChildItem -Force $outputDir | Format-Table -AutoSize
+"""
+    ),
+    "analyse_velopack_paths": pwsh_step(
+        r"""
+$releaseDir = "dist-electron/velopack-windows-$($env:ARCH)"
+
+$nupkg = $null
+if (Test-Path $releaseDir) {
+  $nupkg = Get-ChildItem -Path "$releaseDir/*-full.nupkg" -ErrorAction SilentlyContinue | Select-Object -First 1
+}
+
+if (-not $nupkg) {
+  throw "No Velopack full nupkg found in: $releaseDir"
+}
+
+Write-Host "Analyzing Velopack package $($nupkg.FullName)"
 $env:NUPKG_PATH = $nupkg.FullName
 
 $lines = @(
@@ -279,8 +353,8 @@ $lines = @(
   'import zipfile'
   ''
   'path = os.environ["NUPKG_PATH"]'
-  'build_ver = os.environ["BUILD_VERSION"]'
-  'prefix = os.path.join(os.environ["LOCALAPPDATA"], "fluxer_app", f"app-{build_ver}", "resources", "app.asar.unpacked")'
+  'pack_id = "fluxer_desktop_canary" if os.environ.get("BUILD_CHANNEL") == "canary" else "fluxer_desktop"'
+  'prefix = os.path.join(os.environ["LOCALAPPDATA"], pack_id, "current", "resources", "app.asar.unpacked")'
   'max_len = int(os.environ.get("MAX_WINDOWS_PATH_LEN", "260"))'
   'headroom = int(os.environ.get("PATH_HEADROOM", "10"))'
   'limit = max_len - headroom'
@@ -342,35 +416,33 @@ done
 New-Item -ItemType Directory -Force upload_staging | Out-Null
 
 $dist = Join-Path $env:WORKDIR "fluxer_desktop/dist-electron"
-$sqDirName = if ($env:ARCH -eq "arm64") { "squirrel-windows-arm64" } else { "squirrel-windows" }
-$sqFallbackName = if ($sqDirName -eq "squirrel-windows") { "squirrel-windows-arm64" } else { "squirrel-windows" }
+$releaseDir = Join-Path $dist "velopack-windows-$($env:ARCH)"
 
-$sq = Join-Path $dist $sqDirName
-$sqFallback = Join-Path $dist $sqFallbackName
-
-$picked = $null
-if (Test-Path $sq) { $picked = $sq }
-elseif (Test-Path $sqFallback) { $picked = $sqFallback }
-
-if ($picked) {
-  Copy-Item -Force -ErrorAction SilentlyContinue "$picked\*.exe" "upload_staging\"
-  Copy-Item -Force -ErrorAction SilentlyContinue "$picked\*.exe.blockmap" "upload_staging\"
-  Copy-Item -Force -ErrorAction SilentlyContinue "$picked\RELEASES*" "upload_staging\"
-  Copy-Item -Force -ErrorAction SilentlyContinue "$picked\*.nupkg" "upload_staging\"
-  Copy-Item -Force -ErrorAction SilentlyContinue "$picked\*.nupkg.blockmap" "upload_staging\"
-} elseif ($env:ARCH -eq "arm64" -and (Test-Path $dist)) {
-  Copy-Item -Force -ErrorAction SilentlyContinue "$dist\*.exe" "upload_staging\"
-  Copy-Item -Force -ErrorAction SilentlyContinue "$dist\*.exe.blockmap" "upload_staging\"
+if (-not (Test-Path $releaseDir)) {
+  throw "Velopack release directory not found: $releaseDir"
 }
 
-if (Test-Path $dist) {
-  Copy-Item -Force -ErrorAction SilentlyContinue "$dist\*.yml" "upload_staging\"
-  Copy-Item -Force -ErrorAction SilentlyContinue "$dist\*.zip" "upload_staging\"
-  Copy-Item -Force -ErrorAction SilentlyContinue "$dist\*.zip.blockmap" "upload_staging\"
-}
+Copy-Item -Force -ErrorAction SilentlyContinue "$releaseDir\*.exe" "upload_staging\"
+Copy-Item -Force -ErrorAction SilentlyContinue "$releaseDir\*.zip" "upload_staging\"
+Copy-Item -Force -ErrorAction SilentlyContinue "$releaseDir\*.nupkg" "upload_staging\"
+Copy-Item -Force -ErrorAction SilentlyContinue "$releaseDir\RELEASES*" "upload_staging\"
+Copy-Item -Force -ErrorAction SilentlyContinue "$releaseDir\releases*.json" "upload_staging\"
+Copy-Item -Force -ErrorAction SilentlyContinue "$releaseDir\assets*.json" "upload_staging\"
 
 if (-not (Get-ChildItem upload_staging -Filter *.exe -ErrorAction SilentlyContinue)) {
   throw "No installer .exe staged."
+}
+
+if (-not (Test-Path "upload_staging\RELEASES")) {
+  throw "Legacy Squirrel RELEASES file was not staged."
+}
+
+if (-not (Test-Path "upload_staging\releases.win.json")) {
+  throw "Velopack releases.win.json was not staged."
+}
+
+if (-not (Get-ChildItem upload_staging -Filter "*-full.nupkg" -ErrorAction SilentlyContinue)) {
+  throw "No Velopack full nupkg staged."
 }
 
 Get-ChildItem -Force upload_staging | Format-Table -AutoSize
@@ -411,7 +483,7 @@ ls -la *.sha256 2>/dev/null || echo "No checksum files generated"
     "generate_checksums_windows": pwsh_step(
         r"""
 cd upload_staging
-$extensions = @('.exe', '.nupkg')
+$extensions = @('.exe', '.nupkg', '.zip')
 Get-ChildItem -File | Where-Object { $extensions -contains $_.Extension } | ForEach-Object {
   $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
   Set-Content -Path "$($_.FullName).sha256" -Value $hash -NoNewline
@@ -614,7 +686,8 @@ cat > "$payload_filter" <<'EOF'
 - **/manifest.json
 - **/*.yml
 - **/RELEASES*
-- **/releases.json
+- **/releases*.json
+- **/assets*.json
 + **
 EOF
 
@@ -622,7 +695,8 @@ cat > "$metadata_filter" <<'EOF'
 + **/manifest.json
 + **/*.yml
 + **/RELEASES*
-+ **/releases.json
++ **/releases*.json
++ **/assets*.json
 - **
 EOF
 
