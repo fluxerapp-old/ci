@@ -200,13 +200,13 @@ def build_release_summary(
             ]
         )
 
-    if channel == "nightly":
+    if channel == "canary":
         lines.extend(
             [
                 "pull:",
                 "```bash",
-                f"docker pull {registry}/{image_name}:nightly",
-                f"docker pull {registry}/{image_name}:nightly-{date_ymd}",
+                f"docker pull {registry}/{image_name}:canary",
+                f"docker pull {registry}/{image_name}:canary-{date_ymd}",
                 f"docker pull {registry}/{image_name}:sha-{sha_short}",
                 "```",
             ]
