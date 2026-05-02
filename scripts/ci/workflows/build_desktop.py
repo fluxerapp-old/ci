@@ -299,6 +299,7 @@ Remove-Item -Force -Recurse $outputDir -ErrorAction SilentlyContinue
   --mainExe $mainExe `
   --packTitle $packTitle `
   --packAuthors "Fluxer Contributors" `
+  --shortcuts Desktop,StartMenu `
   --runtime $runtime `
   --icon "build_resources/$iconDir/icon.ico" `
   --outputDir $outputDir `
