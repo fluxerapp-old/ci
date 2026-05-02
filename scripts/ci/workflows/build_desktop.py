@@ -330,6 +330,22 @@ if (-not $legacyFeed.Contains($fullNupkg.Name)) {
   throw "The legacy Squirrel RELEASES file does not reference $($fullNupkg.Name)."
 }
 
+# Rename the Velopack-produced bootstrapper to match the
+# `${productName}-${version}-${os}-${arch}.${ext}` pattern that electron-builder
+# uses for macOS/Linux artifacts. Velopack defaults to `<packId>-win-Setup.exe`,
+# which is identical for x64 and arm64 (the arch lives in the S3 path, not the
+# filename) and looks nothing like the other-OS downloads. We only rename the
+# Setup.exe — the nupkg name is referenced from RELEASES for Squirrel migration
+# and must stay as Velopack wrote it.
+$setupExe = Get-ChildItem -Path "$outputDir\*-Setup.exe" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $setupExe) {
+  throw "Velopack did not produce a Setup.exe in $outputDir."
+}
+$desiredSetupName = "$packTitle-$($env:VERSION)-win-$($env:ARCH).exe"
+if ($setupExe.Name -ne $desiredSetupName) {
+  Rename-Item -LiteralPath $setupExe.FullName -NewName $desiredSetupName
+}
+
 Get-ChildItem -Force $outputDir | Format-Table -AutoSize
 """
     ),
