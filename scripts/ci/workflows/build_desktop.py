@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 import json
 import pathlib
 import sys
@@ -149,7 +150,6 @@ while :; do
   fi
   status=${PIPESTATUS[0]}
   echo "::endgroup::"
-  # Retry only on transient network errors fetching electron/binaries from GitHub.
   if grep -qE '(EOF|status code 5[0-9][0-9]|cannot resolve|i/o timeout|connection reset|TLS handshake)' "${log}" \\
      && [ "${attempt}" -lt "${max_attempts}" ]; then
     echo "Detected transient network failure; retrying."
@@ -218,7 +218,6 @@ while :; do
   fi
   status=${PIPESTATUS[0]}
   echo "::endgroup::"
-  # Retry on the transient signtool/7za RCX*.tmp race or transient GitHub download failures.
   if grep -qE '(RCX[0-9A-Fa-f]+\\.tmp|EOF|status code 5[0-9][0-9]|cannot resolve|i/o timeout|connection reset|TLS handshake)' "${log}" \\
      && [ "${attempt}" -lt "${max_attempts}" ]; then
     echo "Detected transient build failure (RCX race or network); cleaning and retrying."
@@ -306,13 +305,6 @@ if (-not $legacyFeed.Contains($fullNupkg.Name)) {
   throw "The legacy Squirrel RELEASES file does not reference $($fullNupkg.Name)."
 }
 
-# Rename the Velopack-produced bootstrapper to match the
-# `${productName}-${version}-${os}-${arch}.${ext}` pattern that electron-builder
-# uses for macOS/Linux artifacts. Velopack defaults to `<packId>-win-Setup.exe`,
-# which is identical for x64 and arm64 (the arch lives in the S3 path, not the
-# filename) and looks nothing like the other-OS downloads. We only rename the
-# Setup.exe — the nupkg name is referenced from RELEASES for Squirrel migration
-# and must stay as Velopack wrote it.
 $setupExe = Get-ChildItem -Path "$outputDir\*-Setup.exe" -File -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $setupExe) {
   throw "Velopack did not produce a Setup.exe in $outputDir."
