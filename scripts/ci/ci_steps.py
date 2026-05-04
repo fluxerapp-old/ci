@@ -1,21 +1,4 @@
-#!/usr/bin/env python3
-
-# Copyright (C) 2026 Fluxer Contributors
-#
-# This file is part of Fluxer.
-#
-# Fluxer is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Fluxer is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with Fluxer. If not, see <https://www.gnu.org/licenses/>.
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
 from __future__ import annotations
 
@@ -24,7 +7,6 @@ from datetime import datetime, timezone
 from typing import Mapping
 
 from ci_utils import write_github_output, write_github_summary
-
 
 ADD_KNOWN_HOSTS_SCRIPT = """
 set -euo pipefail
@@ -46,7 +28,6 @@ if ! command -v rclone >/dev/null 2>&1; then
   curl -fsSL https://rclone.org/install.sh | sudo bash
 fi
 """
-
 
 def rclone_config_script(
     *,
@@ -72,13 +53,11 @@ def rclone_config_script(
     ]
     return "\n".join(lines) + "\n"
 
-
 def bot_user_id_script() -> str:
     return (
         "set -euo pipefail\n"
         "echo \"user-id=$(gh api \"/users/${APP_SLUG}[bot]\" --jq .id)\" >> \"$GITHUB_OUTPUT\"\n"
     )
-
 
 def record_deploy_commit_script(*, include_env: bool, include_sentry: bool) -> str:
     lines = [
@@ -98,13 +77,11 @@ def record_deploy_commit_script(*, include_env: bool, include_sentry: bool) -> s
         )
     return "\n".join(lines) + "\n"
 
-
 def set_build_timestamp_script(*, env_name: str = "BUILD_TIMESTAMP") -> str:
     return (
         "set -euo pipefail\n"
         f"echo \"{env_name}=$(date -u +%s)\" >> \"$GITHUB_ENV\"\n"
     )
-
 
 @dataclass(frozen=True)
 class ReleaseMetadata:
@@ -115,7 +92,6 @@ class ReleaseMetadata:
     timestamp: str
     date_ymd: str
     build_number: str
-
 
 def build_release_metadata(
     *,
@@ -142,7 +118,6 @@ def build_release_metadata(
         build_number=run_number,
     )
 
-
 def write_release_metadata(metadata: ReleaseMetadata) -> None:
     write_github_output(
         {
@@ -155,7 +130,6 @@ def write_release_metadata(metadata: ReleaseMetadata) -> None:
             "build_number": metadata.build_number,
         }
     )
-
 
 def build_release_summary(
     *,
@@ -224,7 +198,6 @@ def build_release_summary(
         )
 
     return "\n".join(lines) + "\n"
-
 
 def write_release_summary(summary: str, *, build_result: str) -> None:
     write_github_summary(summary)

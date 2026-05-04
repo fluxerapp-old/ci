@@ -1,22 +1,3 @@
-#!/usr/bin/env python3
-
-# Copyright (C) 2026 Fluxer Contributors
-#
-# This file is part of Fluxer.
-#
-# Fluxer is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Fluxer is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with Fluxer. If not, see <https://www.gnu.org/licenses/>.
-
 import json
 import pathlib
 import sys
@@ -27,7 +8,6 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from ci_steps import INSTALL_RCLONE_SCRIPT, rclone_config_script
 from ci_workflow import EnvArg, parse_step_env_args
 from ci_utils import pwsh_step, require_env, run_step, write_github_output
-
 
 PLATFORMS = [
     {"platform": "windows", "arch": "x64", "os": "windows-latest", "electron_arch": "x64"},
@@ -40,10 +20,8 @@ PLATFORMS = [
 
 VELOPACK_VERSION = "0.0.1298"
 
-
 def parse_bool(value: str) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
-
 
 def set_metadata_step(channel: str, test_build: bool) -> None:
     require_env(["GITHUB_RUN_NUMBER"])
@@ -66,7 +44,6 @@ def set_metadata_step(channel: str, test_build: bool) -> None:
             "s3_prefix": s3_prefix,
         }
     )
-
 
 def set_matrix_step(flags: dict[str, bool]) -> None:
     filtered: list[dict[str, str]] = []
@@ -94,7 +71,6 @@ def set_matrix_step(flags: dict[str, bool]) -> None:
 
     matrix = {"include": filtered}
     write_github_output({"matrix": json.dumps(matrix, separators=(",", ":"))})
-
 
 STEPS = {
     "windows_paths": pwsh_step(
@@ -756,7 +732,6 @@ rclone copy "s3_payload/${S3_DESKTOP_PREFIX}" "ovh:${S3_BUCKET}/${S3_DESKTOP_PRE
 """,
 }
 
-
 SKIP_FLAG_ENV_MAP = {
     "skip_windows": "SKIP_WINDOWS",
     "skip_windows_x64": "SKIP_WINDOWS_X64",
@@ -783,7 +758,6 @@ ENV_ARGS = [
     EnvArg("--skip-linux-arm64", "SKIP_LINUX_ARM64"),
 ]
 
-
 def main() -> int:
     import os
 
@@ -805,7 +779,6 @@ def main() -> int:
 
     run_step(STEPS, args.step)
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
