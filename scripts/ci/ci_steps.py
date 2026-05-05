@@ -59,7 +59,7 @@ def bot_user_id_script() -> str:
         "echo \"user-id=$(gh api \"/users/${APP_SLUG}[bot]\" --jq .id)\" >> \"$GITHUB_OUTPUT\"\n"
     )
 
-def record_deploy_commit_script(*, include_env: bool, include_sentry: bool) -> str:
+def record_deploy_commit_script(*, include_env: bool) -> str:
     lines = [
         "set -euo pipefail",
         "sha=$(git rev-parse HEAD)",
@@ -67,14 +67,6 @@ def record_deploy_commit_script(*, include_env: bool, include_sentry: bool) -> s
     ]
     if include_env:
         lines.append("printf 'DEPLOY_SHA=%s\\n' \"$sha\" >> \"$GITHUB_ENV\"")
-    if include_sentry:
-        lines.extend(
-            [
-                "printf 'SENTRY_BUILD_SHA=%s\\n' \"$sha\" >> \"$GITHUB_ENV\"",
-                "printf 'SENTRY_BUILD_NUMBER=%s\\n' \"$GITHUB_RUN_NUMBER\" >> \"$GITHUB_ENV\"",
-                "printf 'SENTRY_BUILD_TIMESTAMP=%s\\n' \"$(date +%s)\" >> \"$GITHUB_ENV\"",
-            ]
-        )
     return "\n".join(lines) + "\n"
 
 def set_build_timestamp_script(*, env_name: str = "BUILD_TIMESTAMP") -> str:
