@@ -170,7 +170,7 @@ ditto -xk "$ZIP" "$tmp"
 APP="$(find "$tmp" -maxdepth 2 -name "*.app" -print -quit)"
 INFO_PLIST="$APP/Contents/Info.plist"
 PROFILE="$APP/Contents/embedded.provisionprofile"
-WEBAUTHN_PACKAGE="$APP/Contents/Resources/app.asar.unpacked/node_modules/@electron-webauthn/native-darwin-${ELECTRON_ARCH}/package.json"
+WEBAUTHN_NATIVE="$APP/Contents/Resources/app.asar.unpacked/node_modules/@electron-webauthn/native-darwin-${ELECTRON_ARCH}/electron-webauthn.darwin-${ELECTRON_ARCH}.node"
 BID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PLIST")
 
 expected="app.fluxer"
@@ -189,8 +189,8 @@ profile_app_id=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.appli
 echo "Provisioning profile app id: $profile_app_id (expected: $expected_profile)"
 test "$profile_app_id" = "$expected_profile"
 
-test -f "$WEBAUTHN_PACKAGE"
-echo "Found WebAuthn runtime package: $WEBAUTHN_PACKAGE"
+test -f "$WEBAUTHN_NATIVE"
+echo "Found WebAuthn native runtime artifact: $WEBAUTHN_NATIVE"
 
 native_rels=(
   "@fluxer/mac-app-audio/prebuilds/darwin-${ELECTRON_ARCH}/mac_app_audio.napi.node"
