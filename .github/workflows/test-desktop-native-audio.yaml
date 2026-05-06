@@ -1,0 +1,277 @@
+name: test desktop native audio
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: fluxer-private ref, branch, or SHA to test
+        required: false
+        default: main
+        type: string
+      run_pipewire_session:
+        description: Run the live PipeWire/WirePlumber smoke on Linux x64
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: '37 6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-native-audio-${{ github.event_name }}-${{ inputs.source_ref || 'main' }}
+  cancel-in-progress: true
+
+env:
+  SOURCE_REF: ${{ inputs.source_ref || 'main' }}
+  ZIG_VERSION: 0.16.0
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux x64 Node 24
+            platform: linux
+            arch: x64
+            electron_arch: x64
+            node_version: 24
+            os: ubuntu-24.04
+            pipewire_session: true
+          - name: linux x64 Node 22
+            platform: linux
+            arch: x64
+            electron_arch: x64
+            node_version: 22
+            os: ubuntu-24.04
+            pipewire_session: false
+          - name: linux arm64 Node 24
+            platform: linux
+            arch: arm64
+            electron_arch: arm64
+            node_version: 24
+            os: ubuntu-24.04-arm
+            pipewire_session: false
+          - name: windows x64 Server 2022 Node 22
+            platform: windows
+            arch: x64
+            electron_arch: x64
+            node_version: 22
+            os: windows-2022
+            pipewire_session: false
+          - name: windows x64 Server 2025 Node 24
+            platform: windows
+            arch: x64
+            electron_arch: x64
+            node_version: 24
+            os: windows-2025
+            pipewire_session: false
+          - name: windows arm64 Node 24
+            platform: windows
+            arch: arm64
+            electron_arch: arm64
+            node_version: 24
+            os: windows-11-arm
+            pipewire_session: false
+          - name: macOS Intel Node 24
+            platform: macos
+            arch: x64
+            electron_arch: x64
+            node_version: 24
+            os: macos-15-intel
+            pipewire_session: false
+          - name: macOS Apple Silicon Node 24
+            platform: macos
+            arch: arm64
+            electron_arch: arm64
+            node_version: 24
+            os: macos-15
+            pipewire_session: false
+    env:
+      PLATFORM: ${{ matrix.platform }}
+      ARCH: ${{ matrix.arch }}
+      ELECTRON_ARCH: ${{ matrix.electron_arch }}
+    steps:
+      - name: Checkout CI repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: _ci
+
+      - name: Clone fluxer-private source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init source
+          git -C source remote add origin "https://x-access-token:${{ secrets.FLUXER_PRIVATE_PAT }}@github.com/fluxerapp-old/fluxer-private.git"
+          git -C source fetch --depth 1 origin "$SOURCE_REF"
+          git -C source checkout --detach FETCH_HEAD
+
+      - name: Shorten Windows paths and pin pnpm store
+        if: runner.os == 'Windows'
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step windows_paths
+        env:
+          SUBST_TARGET: ${{ github.workspace }}/source
+
+      - name: Set workdir (Unix)
+        if: runner.os != 'Windows'
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step set_workdir_unix
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@c5ba7f7862a0f64c1b1a05fbac13e0b8e86ba08c # v4
+        with:
+          version: 10.29.3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
+        with:
+          node-version: ${{ matrix.node_version }}
+
+      - name: Install Zig (Windows)
+        if: runner.os == 'Windows'
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step install_zig_windows
+
+      - name: Install Zig (Unix)
+        if: runner.os != 'Windows'
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step install_zig_unix
+
+      - name: Resolve pnpm store path (Windows)
+        if: runner.os == 'Windows'
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step resolve_pnpm_store_windows
+
+      - name: Resolve pnpm store path (Unix)
+        if: runner.os != 'Windows'
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step resolve_pnpm_store_unix
+
+      - name: Cache pnpm store
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: native-audio-${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node_version }}-${{ hashFiles('source/fluxer_desktop/pnpm-lock.yaml') }}
+          restore-keys: |
+            native-audio-${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node_version }}-
+            native-audio-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step install_linux_deps
+
+      - name: Install Windows dependencies
+        if: matrix.platform == 'windows'
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step install_windows_deps
+
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos'
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step install_macos_deps
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step install_dependencies
+
+      - name: Prepare Node-API headers
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step prepare_node_headers
+
+      - name: Run shared native-audio tests and desktop typecheck
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step run_shared_tests
+
+      - name: Build Linux PipeWire addon
+        if: matrix.platform == 'linux'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step build_linux_native
+
+      - name: Smoke Linux PipeWire addon in Node
+        if: matrix.platform == 'linux'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step smoke_linux_native
+
+      - name: Smoke Linux PipeWire addon in live PipeWire session
+        if: matrix.platform == 'linux' && matrix.pipewire_session && (inputs.run_pipewire_session || github.event_name != 'workflow_dispatch')
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step pipewire_session_smoke
+
+      - name: Smoke Linux PipeWire addon in Electron
+        if: matrix.platform == 'linux'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step electron_smoke_linux
+
+      - name: Build Windows process-loopback addon
+        if: matrix.platform == 'windows'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step build_windows_native
+
+      - name: Smoke Windows process-loopback addon in Node
+        if: matrix.platform == 'windows'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step smoke_windows_native
+
+      - name: Smoke Windows process-loopback addon in Electron
+        if: matrix.platform == 'windows'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step electron_smoke_windows
+
+      - name: Build macOS app-audio addon
+        if: matrix.platform == 'macos'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step build_macos_native
+
+      - name: Smoke macOS app-audio addon in Node
+        if: matrix.platform == 'macos'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step smoke_macos_native
+
+      - name: Smoke macOS app-audio addon in Electron
+        if: matrix.platform == 'macos'
+        working-directory: ${{ env.WORKDIR }}/fluxer_desktop
+        run: >-
+          python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
+          --step electron_smoke_macos
