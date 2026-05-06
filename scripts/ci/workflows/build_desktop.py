@@ -513,6 +513,11 @@ for dir in artifacts/fluxer-desktop-${CHANNEL}-*; do
   dest="s3_payload/${S3_DESKTOP_PREFIX}/${CHANNEL}/${plat}/${arch}"
   mkdir -p "$dest"
   cp -av "$dir"/* "$dest/" || true
+  minimum_system_version=""
+
+  if [[ "$plat" == "darwin" ]]; then
+    minimum_system_version="12.0"
+  fi
 
   if [[ "$plat" == "darwin" ]]; then
     zip_file=""
@@ -624,7 +629,8 @@ EOF
     --arg rpm_sha256 "${rpm_sha256}" \
     --arg tar_gz "$(basename "${targz_file:-}")" \
     --arg tar_gz_sha256 "${targz_sha256}" \
-    '{
+    --arg minimum_system_version "${minimum_system_version}" \
+    '({
       channel: $channel,
       platform: $platform,
       arch: $arch,
@@ -654,7 +660,7 @@ EOF
             . + {tar_gz: (if ($tar_gz_sha256 | length) > 0 then {filename: $tar_gz, sha256: $tar_gz_sha256} else $tar_gz end)}
           else . end
       )
-    }' > "$dest/manifest.json"
+    } | if ($minimum_system_version | length) > 0 then . + {minimum_system_version: $minimum_system_version} else . end)' > "$dest/manifest.json"
 done
 
 echo "Payload tree:"
