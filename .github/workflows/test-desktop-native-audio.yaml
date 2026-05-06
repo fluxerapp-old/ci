@@ -169,7 +169,7 @@ jobs:
           --step resolve_pnpm_store_unix
 
       - name: Cache pnpm store
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ env.PNPM_STORE_PATH }}
           key: native-audio-${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node_version }}-${{ hashFiles('source/fluxer_desktop/pnpm-lock.yaml') }}

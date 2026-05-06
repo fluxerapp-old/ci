@@ -166,7 +166,7 @@ if [ "${PLATFORM:-}" = "windows" ] && [ "${ARCH:-}" = "arm64" ]; then
   pnpm --dir native/linux-audio-capture test
   (
     cd native/win-process-loopback
-    zig test src/windows_version.zig
+    zig test -fno-emit-bin src/windows_version.zig
     zig test -fno-emit-bin src/audio_contract.zig
   )
 else
