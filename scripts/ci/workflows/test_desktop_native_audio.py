@@ -83,19 +83,24 @@ case "$(uname -s)-$(uname -m)" in
   *) echo "Unsupported Zig host: $(uname -s)-$(uname -m)" >&2; exit 1 ;;
 esac
 
-tool_dir="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}/zig/${ZIG_VERSION}-${zig_os}-${zig_arch}"
-archive="${RUNNER_TEMP}/zig-${zig_arch}-${zig_os}-${ZIG_VERSION}.tar.xz"
-url="https://ziglang.org/download/${ZIG_VERSION}/zig-${zig_arch}-${zig_os}-${ZIG_VERSION}.tar.xz"
+tool_dir="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}/zig/${ZIG_VERSION}-pypi-${zig_os}-${zig_arch}"
+pkg_dir="${tool_dir}/py"
+zig_bin="${pkg_dir}/ziglang/zig"
 
-if [ ! -x "${tool_dir}/zig" ]; then
+if [ ! -x "$zig_bin" ]; then
   rm -rf "$tool_dir"
-  mkdir -p "$tool_dir"
-  curl -fsSL "$url" -o "$archive"
-  tar -xf "$archive" -C "$tool_dir" --strip-components=1
+  mkdir -p "$pkg_dir"
+  python3 -m pip install \
+    --disable-pip-version-check \
+    --no-input \
+    --no-compile \
+    --only-binary=:all: \
+    --target "$pkg_dir" \
+    "ziglang==${ZIG_VERSION}"
 fi
 
-echo "$tool_dir" >> "$GITHUB_PATH"
-"${tool_dir}/zig" version
+echo "${pkg_dir}/ziglang" >> "$GITHUB_PATH"
+"$zig_bin" version
 """,
     "install_zig_windows": pwsh_step(
         r"""
@@ -105,30 +110,27 @@ if (-not $env:ZIG_VERSION) {
 
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "aarch64" } else { "x86_64" }
 $toolRoot = if ($env:RUNNER_TOOL_CACHE) { $env:RUNNER_TOOL_CACHE } else { $env:RUNNER_TEMP }
-$toolDir = Join-Path $toolRoot "zig\$($env:ZIG_VERSION)-windows-$arch"
-$archive = Join-Path $env:RUNNER_TEMP "zig-$arch-windows-$($env:ZIG_VERSION).zip"
-$url = "https://ziglang.org/download/$($env:ZIG_VERSION)/zig-$arch-windows-$($env:ZIG_VERSION).zip"
+$toolDir = Join-Path $toolRoot "zig\$($env:ZIG_VERSION)-pypi-windows-$arch"
+$pkgDir = Join-Path $toolDir "py"
+$zigBinDir = Join-Path $pkgDir "ziglang"
+$zigExe = Join-Path $zigBinDir "zig.exe"
 
-if (-not (Test-Path (Join-Path $toolDir "zig.exe"))) {
+if (-not (Test-Path $zigExe)) {
   if (Test-Path $toolDir) {
     Remove-Item -Recurse -Force $toolDir
   }
-  New-Item -ItemType Directory -Force $toolDir | Out-Null
-  Invoke-WebRequest -Uri $url -OutFile $archive
-  $extract = Join-Path $env:RUNNER_TEMP "zig-extract"
-  if (Test-Path $extract) {
-    Remove-Item -Recurse -Force $extract
-  }
-  Expand-Archive -Path $archive -DestinationPath $extract
-  $inner = Get-ChildItem -Path $extract -Directory | Select-Object -First 1
-  if (-not $inner) {
-    throw "Zig archive did not contain a directory."
-  }
-  Copy-Item -Path (Join-Path $inner.FullName "*") -Destination $toolDir -Recurse -Force
+  New-Item -ItemType Directory -Force $pkgDir | Out-Null
+  python -m pip install `
+    --disable-pip-version-check `
+    --no-input `
+    --no-compile `
+    --only-binary=:all: `
+    --target $pkgDir `
+    "ziglang==$($env:ZIG_VERSION)"
 }
 
-$toolDir | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-& (Join-Path $toolDir "zig.exe") version
+$zigBinDir | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+& $zigExe version
 """
     ),
     "install_linux_deps": """
