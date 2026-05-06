@@ -109,8 +109,16 @@ jobs:
           set -euo pipefail
           git init source
           git -C source remote add origin "https://x-access-token:${{ secrets.FLUXER_PRIVATE_PAT }}@github.com/fluxerapp-old/fluxer-private.git"
-          git -C source fetch --depth 1 origin "$SOURCE_REF"
-          git -C source checkout --detach FETCH_HEAD
+          if git -C source fetch --depth 1 origin "$SOURCE_REF"; then
+            git -C source checkout --detach FETCH_HEAD
+          elif [[ "$SOURCE_REF" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+            echo "Direct fetch failed; trying recent main history for abbreviated SHA ${SOURCE_REF}."
+            git -C source fetch --depth 200 origin main
+            git -C source checkout --detach "$SOURCE_REF"
+          else
+            echo "Could not fetch source ref: ${SOURCE_REF}" >&2
+            exit 1
+          fi
 
       - name: Shorten Windows paths and pin pnpm store
         if: runner.os == 'Windows'
