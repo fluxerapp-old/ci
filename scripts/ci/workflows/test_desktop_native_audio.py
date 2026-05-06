@@ -28,6 +28,14 @@ from ci_utils import pwsh_step, run_step
 from ci_workflow import parse_step_env_args
 
 
+ENSURE_ELECTRON_BINARY = """
+if ! node -e "const electron = require('electron'); if (typeof electron !== 'string') process.exit(1);" >/dev/null 2>&1; then
+  ELECTRON_SKIP_BINARY_DOWNLOAD= pnpm rebuild electron
+fi
+node -e "const electron = require('electron'); if (typeof electron !== 'string') throw new Error('electron package did not resolve to a binary path'); console.log('electron binary=' + electron);"
+"""
+
+
 STEPS = {
     "windows_paths": pwsh_step(
         r"""
@@ -151,7 +159,17 @@ pnpm exec node-gyp install --target "$(node -p 'process.versions.node')"
 """,
     "run_shared_tests": """
 set -euo pipefail
-pnpm test:native-audio
+if [ "${PLATFORM:-}" = "windows" ] && [ "${ARCH:-}" = "arm64" ]; then
+  pnpm test:linux-audio-helpers
+  pnpm --dir native/linux-audio-capture test
+  (
+    cd native/win-process-loopback
+    zig test src/windows_version.zig
+    zig test -fno-emit-bin src/audio_contract.zig
+  )
+else
+  pnpm test:native-audio
+fi
 pnpm typecheck
 """,
     "build_linux_native": """
@@ -159,7 +177,19 @@ set -euo pipefail
 pnpm --dir native/linux-audio-capture build
 installed="node_modules/@fluxer/linux-audio-capture"
 if [ -d "$installed" ]; then
-  cp -f native/linux-audio-capture/linux-audio-capture.linux-*-gnu.node "$installed"/
+  case "${ARCH:-$(uname -m)}" in
+    x64|x86_64) artifact="native/linux-audio-capture/linux-audio-capture.linux-x64-gnu.node" ;;
+    arm64|aarch64) artifact="native/linux-audio-capture/linux-audio-capture.linux-arm64-gnu.node" ;;
+    *) echo "Unsupported Linux architecture for artifact sync: ${ARCH:-$(uname -m)}" >&2; exit 1 ;;
+  esac
+  dest="$installed/$(basename "$artifact")"
+  if [ ! -f "$artifact" ]; then
+    echo "Linux native artifact was not produced: $artifact" >&2
+    exit 1
+  fi
+  if [ ! -e "$dest" ] || [ ! "$artifact" -ef "$dest" ]; then
+    cp -f "$artifact" "$installed"/
+  fi
 fi
 """,
     "smoke_linux_native": """
@@ -312,16 +342,19 @@ node - <<'NODE'
 })();
 NODE
 """,
-    "electron_smoke_linux": """
+    "electron_smoke_linux": f"""
 set -euo pipefail
+{ENSURE_ELECTRON_BINARY}
 ELECTRON_RUN_AS_NODE=1 pnpm exec electron -e "const addon = require('./native/linux-audio-capture'); const bridge = new addon.AudioBridge(); bridge.release(); console.log('electron linux native load ok');"
 """,
-    "electron_smoke_windows": """
+    "electron_smoke_windows": f"""
 set -euo pipefail
+{ENSURE_ELECTRON_BINARY}
 ELECTRON_RUN_AS_NODE=1 pnpm exec electron -e "const addon = require('./native/win-process-loopback'); if (typeof addon.isSupported !== 'function') throw new Error('missing isSupported'); console.log('electron windows native load ok');"
 """,
-    "electron_smoke_macos": """
+    "electron_smoke_macos": f"""
 set -euo pipefail
+{ENSURE_ELECTRON_BINARY}
 ELECTRON_RUN_AS_NODE=1 pnpm exec electron -e "const addon = require('./native/mac-app-audio'); if (typeof addon.getBackendAvailability !== 'function') throw new Error('missing getBackendAvailability'); console.log('electron macos native load ok');"
 """,
 }
