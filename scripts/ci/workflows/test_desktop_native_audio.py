@@ -278,7 +278,8 @@ NODE
     "build_macos_native": """
 set -euo pipefail
 pnpm --dir native/mac-app-audio typecheck
-pnpm --dir native/mac-app-audio build
+pnpm --dir native/mac-app-audio build:ts
+pnpm --dir native/mac-app-audio exec cmake-js compile
 """,
     "smoke_macos_native": """
 set -euo pipefail
