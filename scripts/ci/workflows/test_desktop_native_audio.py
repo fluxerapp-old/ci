@@ -170,8 +170,30 @@ if ($arch -eq "aarch64") {
     ),
     "install_linux_deps": """
 set -euo pipefail
-sudo apt-get update
-sudo apt-get install -y \
+
+apt_get() {
+  local attempt
+  for attempt in 1 2 3; do
+    if sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
+      timeout --kill-after=30s 420s \
+      apt-get \
+        -o Dpkg::Use-Pty=0 \
+        -o Acquire::Retries=3 \
+        -o Acquire::http::Timeout=30 \
+        -o Acquire::https::Timeout=30 \
+        "$@"; then
+      return 0
+    fi
+    local status=$?
+    if [ "$attempt" -eq 3 ]; then
+      return "$status"
+    fi
+    sleep "$((attempt * 15))"
+  done
+}
+
+apt_get update
+apt_get install -y --no-install-recommends \
   build-essential pkg-config \
   libpipewire-0.3-dev libspa-0.2-dev pipewire pipewire-bin wireplumber \
   dbus-x11 xvfb weston xwayland
