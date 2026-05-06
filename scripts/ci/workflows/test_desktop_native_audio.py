@@ -110,7 +110,19 @@ if (-not $env:ZIG_VERSION) {
 
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "aarch64" } else { "x86_64" }
 $toolRoot = if ($env:RUNNER_TOOL_CACHE) { $env:RUNNER_TOOL_CACHE } else { $env:RUNNER_TEMP }
-$toolDir = Join-Path $toolRoot "zig\$($env:ZIG_VERSION)-pypi-windows-$arch"
+
+# Zig 0.16.0's native aarch64-windows host binary currently crashes on the
+# GitHub Windows ARM64 runner. Use the x86_64 Windows binary under emulation
+# there; it can still cross-compile the ARM64 addon.
+if ($arch -eq "aarch64") {
+  $zigWheelPlatform = "win_amd64"
+  $toolArchSuffix = "x86_64-on-aarch64"
+} else {
+  $zigWheelPlatform = "win_amd64"
+  $toolArchSuffix = $arch
+}
+
+$toolDir = Join-Path $toolRoot "zig\$($env:ZIG_VERSION)-pypi-windows-$toolArchSuffix"
 $pkgDir = Join-Path $toolDir "py"
 $zigBinDir = Join-Path $pkgDir "ziglang"
 $zigExe = Join-Path $zigBinDir "zig.exe"
@@ -120,16 +132,41 @@ if (-not (Test-Path $zigExe)) {
     Remove-Item -Recurse -Force $toolDir
   }
   New-Item -ItemType Directory -Force $pkgDir | Out-Null
-  python -m pip install `
-    --disable-pip-version-check `
-    --no-input `
-    --no-compile `
-    --only-binary=:all: `
-    --target $pkgDir `
-    "ziglang==$($env:ZIG_VERSION)"
+  if ($arch -eq "aarch64") {
+    $wheelDir = Join-Path $toolDir "wheel"
+    New-Item -ItemType Directory -Force $wheelDir | Out-Null
+    python -m pip download `
+      --disable-pip-version-check `
+      --no-input `
+      --only-binary=:all: `
+      --implementation py `
+      --python-version 3 `
+      --abi none `
+      --platform $zigWheelPlatform `
+      --dest $wheelDir `
+      "ziglang==$($env:ZIG_VERSION)"
+    $wheel = Get-ChildItem -Path $wheelDir -Filter "ziglang-*-py3-none-$zigWheelPlatform.whl" | Select-Object -First 1
+    if (-not $wheel) {
+      throw "Could not find downloaded Zig wheel for platform $zigWheelPlatform."
+    }
+    $zipPath = Join-Path $wheelDir "ziglang.zip"
+    Copy-Item -Force $wheel.FullName $zipPath
+    Expand-Archive -Path $zipPath -DestinationPath $pkgDir -Force
+  } else {
+    python -m pip install `
+      --disable-pip-version-check `
+      --no-input `
+      --no-compile `
+      --only-binary=:all: `
+      --target $pkgDir `
+      "ziglang==$($env:ZIG_VERSION)"
+  }
 }
 
 $zigBinDir | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+if ($arch -eq "aarch64") {
+  echo "::warning::Using x86_64 Zig $($env:ZIG_VERSION) under Windows ARM64 emulation because the native aarch64-windows 0.16.0 binary crashes; see https://codeberg.org/ziglang/zig/issues/31865."
+}
 & $zigExe version
 """
     ),
@@ -162,9 +199,8 @@ pnpm exec node-gyp install --target "$(node -p 'process.versions.node')"
     "run_shared_tests": """
 set -euo pipefail
 if [ "${PLATFORM:-}" = "windows" ] && [ "${ARCH:-}" = "arm64" ]; then
-  pnpm test:linux-audio-helpers
-  pnpm --dir native/linux-audio-capture test
-  echo "::warning::Skipping win-process-loopback Zig invocations on Windows ARM64 because Zig ${ZIG_VERSION:-unknown} segfaults on this runner; Linux x64 cross-checks both Windows targets."
+  echo "::notice::Windows ARM64 runs Zig via the x86_64 host workaround for Zig 0.16.0; see https://codeberg.org/ziglang/zig/issues/31865."
+  pnpm test:native-audio
 elif [ "${PLATFORM:-}" = "linux" ] && [ "${ARCH:-}" = "x64" ] && node -e "process.exit(process.versions.node.startsWith('24.') ? 0 : 1)"; then
   pnpm test:native-audio
   (

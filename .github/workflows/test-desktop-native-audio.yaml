@@ -244,21 +244,21 @@ jobs:
           --step electron_smoke_linux
 
       - name: Build Windows process-loopback addon
-        if: matrix.platform == 'windows' && matrix.arch != 'arm64'
+        if: matrix.platform == 'windows'
         working-directory: ${{ env.WORKDIR }}/fluxer_desktop
         run: >-
           python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
           --step build_windows_native
 
       - name: Smoke Windows process-loopback addon in Node
-        if: matrix.platform == 'windows' && matrix.arch != 'arm64'
+        if: matrix.platform == 'windows'
         working-directory: ${{ env.WORKDIR }}/fluxer_desktop
         run: >-
           python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
           --step smoke_windows_native
 
       - name: Smoke Windows process-loopback addon in Electron
-        if: matrix.platform == 'windows' && matrix.arch != 'arm64'
+        if: matrix.platform == 'windows'
         working-directory: ${{ env.WORKDIR }}/fluxer_desktop
         run: >-
           python3 ${{ github.workspace }}/_ci/scripts/ci/workflows/test_desktop_native_audio.py
