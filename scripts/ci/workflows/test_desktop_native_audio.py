@@ -139,9 +139,7 @@ if (-not (Test-Path $zigExe)) {
       --disable-pip-version-check `
       --no-input `
       --only-binary=:all: `
-      --implementation py `
-      --python-version 3 `
-      --abi none `
+      --no-deps `
       --platform $zigWheelPlatform `
       --dest $wheelDir `
       "ziglang==$($env:ZIG_VERSION)"
