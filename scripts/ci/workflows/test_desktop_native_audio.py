@@ -164,10 +164,13 @@ set -euo pipefail
 if [ "${PLATFORM:-}" = "windows" ] && [ "${ARCH:-}" = "arm64" ]; then
   pnpm test:linux-audio-helpers
   pnpm --dir native/linux-audio-capture test
+  echo "::warning::Skipping win-process-loopback Zig invocations on Windows ARM64 because Zig ${ZIG_VERSION:-unknown} segfaults on this runner; Linux x64 cross-checks both Windows targets."
+elif [ "${PLATFORM:-}" = "linux" ] && [ "${ARCH:-}" = "x64" ] && node -e "process.exit(process.versions.node.startsWith('24.') ? 0 : 1)"; then
+  pnpm test:native-audio
   (
     cd native/win-process-loopback
-    zig build-obj -fno-emit-bin src/windows_version.zig
-    zig build-obj -fno-emit-bin src/audio_contract.zig
+    zig build-lib src/main.zig -dynamic -fPIC -O ReleaseSafe -fstrip -target x86_64-windows-msvc -lc -fno-emit-bin
+    zig build-lib src/main.zig -dynamic -fPIC -O ReleaseSafe -fstrip -target aarch64-windows-msvc -lc -fno-emit-bin
   )
 else
   pnpm test:native-audio
