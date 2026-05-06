@@ -157,6 +157,10 @@ pnpm typecheck
     "build_linux_native": """
 set -euo pipefail
 pnpm --dir native/linux-audio-capture build
+installed="node_modules/@fluxer/linux-audio-capture"
+if [ -d "$installed" ]; then
+  cp -f native/linux-audio-capture/linux-audio-capture.linux-*-gnu.node "$installed"/
+fi
 """,
     "smoke_linux_native": """
 set -euo pipefail
